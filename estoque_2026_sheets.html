@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controle de Estoque 2026</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0f14;
+    --surface: #151820;
+    --surface2: #1c2030;
+    --border: #252a3a;
+    --accent: #4fffb0;
+    --accent2: #ff6b6b;
+    --accent3: #ffd166;
+    --text: #e8eaf0;
+    --text-muted: #6b7280;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'DM Sans', sans-serif; min-height: 100vh;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(79,255,176,0.07) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 40% at 90% 80%, rgba(255,107,107,0.05) 0%, transparent 50%);
+  }
+
+  header {
+    border-bottom: 1px solid var(--border); padding: 20px 40px;
+    display: flex; align-items: center; justify-content: space-between;
+    backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 100;
+    background: rgba(13,15,20,0.9);
+  }
+  .logo { font-family: 'Space Mono', monospace; font-size: 18px; letter-spacing: -0.5px; color: var(--accent); }
+  .logo span { color: var(--text-muted); }
+  .header-right { display: flex; align-items: center; gap: 20px; }
+  .header-date { font-size: 13px; color: var(--text-muted); font-family: 'Space Mono', monospace; }
+  .sync-status { font-size: 12px; font-family: 'Space Mono', monospace; display: flex; align-items: center; gap: 6px; }
+  .sync-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); }
+  .sync-dot.ok { background: var(--accent); }
+  .sync-dot.loading { background: var(--accent3); animation: pulse 1s infinite; }
+  .sync-dot.error { background: var(--accent2); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  .main { max-width: 1400px; margin: 0 auto; padding: 40px; }
+
+  /* CONFIG BANNER */
+  .config-banner {
+    background: rgba(255,209,102,0.08); border: 1px solid rgba(255,209,102,0.25);
+    border-radius: 12px; padding: 16px 22px; margin-bottom: 24px;
+    display: flex; align-items: center; gap: 14px; font-size: 14px;
+  }
+  .config-banner.hidden { display: none; }
+  .config-banner strong { color: var(--accent3); }
+  .config-banner code {
+    background: var(--surface2); padding: 2px 8px; border-radius: 4px;
+    font-family: 'Space Mono', monospace; font-size: 12px; color: var(--accent);
+  }
+
+  .tabs {
+    display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 4px; margin-bottom: 32px; width: fit-content;
+  }
+  .tab {
+    padding: 10px 24px; border-radius: 8px; border: none; background: transparent;
+    color: var(--text-muted); font-family: 'DM Sans', sans-serif; font-size: 14px;
+    font-weight: 500; cursor: pointer; transition: all 0.2s;
+  }
+  .tab.active { background: var(--surface2); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+  .tab:hover:not(.active) { color: var(--text); }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .estoque-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; margin-bottom: 40px; }
+
+  .produto-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 24px 20px; position: relative;
+    overflow: hidden; transition: transform 0.2s, border-color 0.2s;
+  }
+  .produto-card:hover { transform: translateY(-2px); border-color: rgba(79,255,176,0.3); }
+  .produto-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, var(--accent), transparent); border-radius: 16px 16px 0 0;
+  }
+  .produto-card.alerta::before { background: linear-gradient(90deg, var(--accent2), transparent); }
+  .produto-card.zerado::before { background: linear-gradient(90deg, #444, transparent); }
+  .produto-nome { font-family: 'Space Mono', monospace; font-size: 12px; color: var(--text-muted); letter-spacing: 1px; margin-bottom: 12px; word-break: break-word; }
+  .produto-saldo { font-family: 'Space Mono', monospace; font-size: 42px; font-weight: 700; color: var(--accent); line-height: 1; margin-bottom: 8px; }
+  .produto-card.alerta .produto-saldo { color: var(--accent2); }
+  .produto-card.zerado .produto-saldo { color: #555; }
+  .produto-label { font-size: 12px; color: var(--text-muted); }
+
+  .resumo-bar { display: flex; gap: 16px; margin-bottom: 32px; flex-wrap: wrap; }
+  .resumo-item { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 22px; flex: 1; min-width: 130px; }
+  .r-label { font-size: 11px; color: var(--text-muted); font-family: 'Space Mono', monospace; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .r-val { font-family: 'Space Mono', monospace; font-size: 28px; font-weight: 700; }
+  .r-val.green { color: var(--accent); }
+  .r-val.red { color: var(--accent2); }
+  .r-val.yellow { color: var(--accent3); }
+
+  .form-section { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 28px; margin-bottom: 32px; }
+  .form-title {
+    font-family: 'Space Mono', monospace; font-size: 13px; letter-spacing: 1px;
+    color: var(--text-muted); margin-bottom: 20px; display: flex; align-items: center; gap: 10px;
+  }
+  .form-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .form-title .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  .form-title.venda .dot { background: var(--accent2); }
+
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 16px; align-items: end; }
+  .field-wide { grid-column: span 2; }
+  .field { display: flex; flex-direction: column; gap: 8px; }
+  .field label { font-size: 12px; color: var(--text-muted); font-weight: 500; letter-spacing: 0.3px; }
+
+  .field input, .field select, .field textarea {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text); font-family: 'DM Sans', sans-serif;
+    font-size: 14px; padding: 10px 14px; outline: none; transition: border-color 0.2s; width: 100%;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus {
+    border-color: var(--accent); box-shadow: 0 0 0 3px rgba(79,255,176,0.1);
+  }
+  .field select option { background: var(--surface2); }
+  .field textarea { resize: vertical; min-height: 42px; max-height: 100px; line-height: 1.4; }
+  .field input:disabled, .field select:disabled, .field button:disabled {
+    opacity: 0.5; cursor: not-allowed;
+  }
+
+  .btn { padding: 11px 22px; border-radius: 8px; border: none; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+  .btn-entrada { background: var(--accent); color: #0d0f14; }
+  .btn-entrada:hover:not(:disabled) { background: #3de89d; transform: translateY(-1px); box-shadow: 0 4px 20px rgba(79,255,176,0.3); }
+  .btn-venda { background: var(--accent2); color: #fff; }
+  .btn-venda:hover:not(:disabled) { background: #ff5252; transform: translateY(-1px); box-shadow: 0 4px 20px rgba(255,107,107,0.3); }
+
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+  .table-header { padding: 18px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .table-header h3 { font-family: 'Space Mono', monospace; font-size: 13px; letter-spacing: 1px; color: var(--text-muted); }
+  .badge { font-size: 12px; padding: 3px 10px; border-radius: 20px; font-weight: 600; font-family: 'Space Mono', monospace; }
+  .badge-entrada { background: rgba(79,255,176,0.1); color: var(--accent); }
+  .badge-venda { background: rgba(255,107,107,0.1); color: var(--accent2); }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    background: var(--surface2); padding: 11px 18px; text-align: left;
+    font-size: 11px; font-weight: 600; color: var(--text-muted); letter-spacing: 0.8px;
+    text-transform: uppercase; border-bottom: 1px solid var(--border);
+  }
+  tbody tr { border-bottom: 1px solid rgba(37,42,58,0.5); transition: background 0.15s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+  tbody td { padding: 12px 18px; font-size: 14px; color: var(--text); vertical-align: middle; }
+
+  .tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-family: 'Space Mono', monospace; }
+  .tag-produto { background: rgba(79,255,176,0.08); color: var(--accent); }
+  .tag-status-entregue { background: rgba(79,255,176,0.1); color: var(--accent); }
+  .tag-status-pendente { background: rgba(255,209,102,0.1); color: var(--accent3); }
+  .tag-motivo { background: rgba(107,114,128,0.15); color: var(--text-muted); font-size: 11px; }
+  .obs-cell { font-size: 12px; color: var(--text-muted); font-style: italic; max-width: 180px; word-break: break-word; }
+
+  .empty-state { text-align: center; padding: 48px 20px; color: var(--text-muted); font-size: 14px; }
+  .empty-state .icon { font-size: 32px; margin-bottom: 12px; opacity: 0.4; }
+
+  .btn-del {
+    background: none; border: none; color: var(--text-muted);
+    cursor: pointer; font-size: 15px; padding: 5px 9px; border-radius: 6px; transition: all 0.2s; line-height: 1;
+  }
+  .btn-del:hover { color: var(--accent2); background: rgba(255,107,107,0.12); }
+
+  /* LOADING OVERLAY */
+  .loading-row td { text-align: center; padding: 32px; color: var(--text-muted); font-size: 13px; font-family: 'Space Mono', monospace; }
+
+  /* TOAST */
+  .toast {
+    position: fixed; bottom: 30px; right: 30px; padding: 14px 22px;
+    border-radius: 10px; font-size: 14px; font-weight: 500; z-index: 9999;
+    transform: translateY(80px); opacity: 0;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); pointer-events: none;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { background: var(--accent); color: #0d0f14; }
+  .toast.error { background: var(--accent2); color: #fff; }
+  .toast.info { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+
+  /* MODAL */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    z-index: 9000; align-items: center; justify-content: center; backdrop-filter: blur(4px);
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 32px 28px; width: 340px; text-align: center;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+  }
+  .modal-icon { font-size: 32px; margin-bottom: 14px; }
+  .modal-msg { font-size: 15px; color: var(--text); margin-bottom: 24px; line-height: 1.5; }
+  .modal-btns { display: flex; gap: 10px; justify-content: center; }
+  .modal-cancel {
+    padding: 10px 24px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface2); color: var(--text-muted); font-family: 'DM Sans', sans-serif;
+    font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s;
+  }
+  .modal-cancel:hover { color: var(--text); }
+  .modal-confirm {
+    padding: 10px 24px; border-radius: 8px; border: none;
+    background: var(--accent2); color: #fff; font-family: 'DM Sans', sans-serif;
+    font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+  }
+  .modal-confirm:hover { background: #ff5252; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">ESTOQUE<span>.2026</span></div>
+  <div class="header-right">
+    <div class="sync-status">
+      <div class="sync-dot" id="syncDot"></div>
+      <span id="syncLabel">—</span>
+    </div>
+    <div class="header-date" id="headerDate"></div>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- Banner de configuração -->
+  <div class="config-banner" id="configBanner">
+    ⚠️ <strong>Configure a URL do servidor:</strong> abra este arquivo em um editor de texto e substitua o valor de <code>API_URL</code> pela URL gerada no Google Apps Script.
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="estoque">📦 Estoque</button>
+    <button class="tab" data-tab="entradas">⬆️ Entradas</button>
+    <button class="tab" data-tab="vendas">⬇️ Vendas</button>
+  </div>
+
+  <!-- ESTOQUE -->
+  <div class="panel active" id="panel-estoque">
+    <div class="resumo-bar" id="resumoBar"></div>
+    <div class="estoque-grid" id="estoqueGrid"></div>
+  </div>
+
+  <!-- ENTRADAS -->
+  <div class="panel" id="panel-entradas">
+    <div class="form-section">
+      <div class="form-title"><span class="dot"></span>NOVA ENTRADA</div>
+      <div class="form-grid">
+        <div class="field">
+          <label>Data da Compra</label>
+          <input type="date" id="e-data">
+        </div>
+        <div class="field">
+          <label>Produto</label>
+          <input type="text" id="e-produto" list="listProdutos" placeholder="Digite o produto..." autocomplete="off">
+          <datalist id="listProdutos"></datalist>
+        </div>
+        <div class="field">
+          <label>Motivo</label>
+          <input type="text" id="e-motivo" placeholder="Ex: Compra, Contagem...">
+        </div>
+        <div class="field">
+          <label>Quantidade</label>
+          <input type="number" id="e-qtde" min="1" placeholder="0">
+        </div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <button class="btn btn-entrada" id="btnAddEntrada">+ Registrar Entrada</button>
+        </div>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <div class="table-header">
+        <h3>HISTÓRICO DE ENTRADAS</h3>
+        <span class="badge badge-entrada" id="countEntradas">0</span>
+      </div>
+      <table>
+        <thead><tr><th>Data</th><th>Produto</th><th>Motivo</th><th>Qtde</th><th></th></tr></thead>
+        <tbody id="tbodyEntradas"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- VENDAS -->
+  <div class="panel" id="panel-vendas">
+    <div class="form-section">
+      <div class="form-title venda"><span class="dot"></span>NOVA VENDA</div>
+      <div class="form-grid">
+        <div class="field">
+          <label>Data da Venda</label>
+          <input type="date" id="v-data">
+        </div>
+        <div class="field">
+          <label>Cliente</label>
+          <input type="text" id="v-cliente" placeholder="Nome do cliente">
+        </div>
+        <div class="field">
+          <label>Produto</label>
+          <select id="v-produto"></select>
+        </div>
+        <div class="field">
+          <label>Quantidade</label>
+          <input type="number" id="v-qtde" min="1" placeholder="0">
+        </div>
+        <div class="field">
+          <label>Motivo</label>
+          <input type="text" id="v-motivo" placeholder="Ex: Venda, Doação...">
+        </div>
+        <div class="field">
+          <label>Status</label>
+          <select id="v-status">
+            <option>Entregue</option>
+            <option>Pendente</option>
+          </select>
+        </div>
+        <div class="field field-wide">
+          <label>Observações</label>
+          <textarea id="v-obs" placeholder="Detalhes adicionais..."></textarea>
+        </div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <button class="btn btn-venda" id="btnAddVenda">− Registrar Venda</button>
+        </div>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <div class="table-header">
+        <h3>HISTÓRICO DE VENDAS</h3>
+        <span class="badge badge-venda" id="countVendas">0</span>
+      </div>
+      <table>
+        <thead><tr><th>Data</th><th>Cliente</th><th>Produto</th><th>Motivo</th><th>Qtde</th><th>Status</th><th>Obs</th><th></th></tr></thead>
+        <tbody id="tbodyVendas"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-box">
+    <div class="modal-icon">🗑️</div>
+    <div class="modal-msg">Deseja remover este registro?<br><small style="color:var(--text-muted)">Essa ação não pode ser desfeita.</small></div>
+    <div class="modal-btns">
+      <button class="modal-cancel" id="modalCancel">Cancelar</button>
+      <button class="modal-confirm" id="modalConfirm">Remover</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════════════
+//  ⚙️  CONFIGURAÇÃO — cole aqui a URL gerada pelo Google Apps Script
+// ══════════════════════════════════════════════════════════════════════════════
+const API_URL = 'https://script.google.com/macros/s/AKfycbzuILdUZlBYngnMB8oL2if3OYlkN8RdBFMK7dSvrCOgZe1emyM_HrumrpouNdkk3oo_/exec';
+// ══════════════════════════════════════════════════════════════════════════════
+
+let entradas = [];
+let vendas   = [];
+let isLoading = false;
+
+// ─── API ──────────────────────────────────────────────────────────────────────
+async function api(params) {
+  const url = API_URL + '?' + new URLSearchParams(params).toString();
+  const res  = await fetch(url);
+  const json = await res.json();
+  if (json.status !== 'ok') throw new Error(json.msg || 'Erro na API');
+  return json.data;
+}
+
+async function loadAll() {
+  setSyncStatus('loading', 'Carregando...');
+  try {
+    const data = await api({ action: 'getAll' });
+    entradas = (data.entradas || []).map(normalizeEntrada);
+    vendas   = (data.vendas   || []).map(normalizeVenda);
+    setSyncStatus('ok', 'Sincronizado');
+    renderAll();
+  } catch(e) {
+    setSyncStatus('error', 'Erro de conexão');
+    toast('Erro ao carregar dados: ' + e.message, 'error');
+  }
+}
+
+function normalizeEntrada(e) {
+  return { id: String(e.id), data: e.data, produto: e.produto, motivo: e.motivo, qtde: +e.qtde };
+}
+function normalizeVenda(v) {
+  return { id: String(v.id), data: v.data, cliente: v.cliente, produto: v.produto, motivo: v.motivo, qtde: +v.qtde, status: v.status, obs: v.obs };
+}
+
+// ─── CÁLCULO ──────────────────────────────────────────────────────────────────
+function getProdutos() {
+  return [...new Set(entradas.map(e => e.produto).filter(Boolean))].sort();
+}
+
+function calcEstoque() {
+  const saldo = {};
+  entradas.forEach(e => { saldo[e.produto] = (saldo[e.produto] || 0) + +e.qtde; });
+  vendas.forEach(v   => { saldo[v.produto] = (saldo[v.produto] || 0) - +v.qtde; });
+  return saldo;
+}
+
+// ─── RENDERS ──────────────────────────────────────────────────────────────────
+function renderEstoque() {
+  const saldo   = calcEstoque();
+  const produtos = getProdutos();
+  const total   = Object.values(saldo).reduce((a, b) => a + b, 0);
+  const totalE  = entradas.reduce((a, e) => a + +e.qtde, 0);
+  const totalV  = vendas.reduce((a, v) => a + +v.qtde, 0);
+
+  document.getElementById('resumoBar').innerHTML = `
+    <div class="resumo-item"><div class="r-label">SALDO TOTAL</div><div class="r-val yellow">${total}</div></div>
+    <div class="resumo-item"><div class="r-label">TOTAL ENTRADAS</div><div class="r-val green">+${totalE}</div></div>
+    <div class="resumo-item"><div class="r-label">TOTAL VENDAS</div><div class="r-val red">-${totalV}</div></div>
+    <div class="resumo-item"><div class="r-label">PRODUTOS</div><div class="r-val" style="color:var(--text)">${produtos.length}</div></div>
+  `;
+
+  document.getElementById('estoqueGrid').innerHTML = produtos.length
+    ? produtos.map(p => {
+        const s = saldo[p] || 0;
+        const cls = s <= 0 ? 'zerado' : s <= 5 ? 'alerta' : '';
+        const label = s <= 0 ? '⛔ sem estoque' : s <= 5 ? '⚠ estoque baixo' : 'unidades em estoque';
+        return `<div class="produto-card ${cls}">
+          <div class="produto-nome">${p}</div>
+          <div class="produto-saldo">${s}</div>
+          <div class="produto-label">${label}</div>
+        </div>`;
+      }).join('')
+    : `<div style="color:var(--text-muted);font-size:14px;padding:20px 0">Nenhum produto ainda. Registre entradas para começar.</div>`;
+}
+
+function renderEntradas() {
+  const tbody = document.getElementById('tbodyEntradas');
+  document.getElementById('countEntradas').textContent = entradas.length;
+  document.getElementById('listProdutos').innerHTML = getProdutos().map(p => `<option value="${p}">`).join('');
+
+  tbody.innerHTML = entradas.length
+    ? [...entradas].reverse().map(e => `
+        <tr>
+          <td>${fmtDate(e.data)}</td>
+          <td><span class="tag tag-produto">${e.produto}</span></td>
+          <td><span class="tag tag-motivo">${e.motivo || '—'}</span></td>
+          <td><strong>+${e.qtde}</strong></td>
+          <td><button class="btn-del" data-type="entrada" data-id="${e.id}">✕</button></td>
+        </tr>`).join('')
+    : `<tr><td colspan="5"><div class="empty-state"><div class="icon">📭</div>Nenhuma entrada registrada</div></td></tr>`;
+}
+
+function renderVendas() {
+  const tbody = document.getElementById('tbodyVendas');
+  document.getElementById('countVendas').textContent = vendas.length;
+
+  const sel = document.getElementById('v-produto');
+  const cur = sel.value;
+  const prods = getProdutos();
+  sel.innerHTML = prods.map(p => `<option value="${p}">${p}</option>`).join('');
+  if (prods.includes(cur)) sel.value = cur;
+
+  tbody.innerHTML = vendas.length
+    ? [...vendas].reverse().map(v => `
+        <tr>
+          <td>${fmtDate(v.data)}</td>
+          <td>${v.cliente || '<span style="color:var(--text-muted)">—</span>'}</td>
+          <td><span class="tag tag-produto">${v.produto}</span></td>
+          <td><span class="tag tag-motivo">${v.motivo || '—'}</span></td>
+          <td><strong style="color:var(--accent2)">-${v.qtde}</strong></td>
+          <td><span class="tag ${v.status === 'Entregue' ? 'tag-status-entregue' : 'tag-status-pendente'}">${v.status}</span></td>
+          <td class="obs-cell">${v.obs || '<span style="color:var(--text-muted)">—</span>'}</td>
+          <td><button class="btn-del" data-type="venda" data-id="${v.id}">✕</button></td>
+        </tr>`).join('')
+    : `<tr><td colspan="8"><div class="empty-state"><div class="icon">🛒</div>Nenhuma venda registrada</div></td></tr>`;
+}
+
+function renderAll() { renderEstoque(); renderEntradas(); renderVendas(); }
+
+// ─── ADDS ─────────────────────────────────────────────────────────────────────
+async function addEntrada() {
+  const data    = document.getElementById('e-data').value;
+  const produto = document.getElementById('e-produto').value.trim();
+  const motivo  = document.getElementById('e-motivo').value.trim();
+  const qtde    = parseInt(document.getElementById('e-qtde').value);
+
+  if (!data || !produto || !qtde || qtde < 1) { toast('Preencha data, produto e quantidade.', 'error'); return; }
+
+  setFormLoading(true);
+  setSyncStatus('loading', 'Salvando...');
+  try {
+    const result = await api({ action: 'addEntrada', data, produto, motivo, qtde });
+    entradas.push({ id: String(result.id), data, produto, motivo, qtde });
+    renderAll();
+    document.getElementById('e-produto').value = '';
+    document.getElementById('e-motivo').value = '';
+    document.getElementById('e-qtde').value = '';
+    setSyncStatus('ok', 'Sincronizado');
+    toast(`✓ Entrada de ${qtde}x ${produto} registrada!`, 'success');
+  } catch(e) {
+    setSyncStatus('error', 'Erro ao salvar');
+    toast('Erro ao salvar: ' + e.message, 'error');
+  }
+  setFormLoading(false);
+}
+
+async function addVenda() {
+  const data    = document.getElementById('v-data').value;
+  const cliente = document.getElementById('v-cliente').value.trim();
+  const produto = document.getElementById('v-produto').value;
+  const qtde    = parseInt(document.getElementById('v-qtde').value);
+  const motivo  = document.getElementById('v-motivo').value.trim();
+  const status  = document.getElementById('v-status').value;
+  const obs     = document.getElementById('v-obs').value.trim();
+
+  if (!data || !produto || !qtde || qtde < 1) { toast('Preencha data, produto e quantidade.', 'error'); return; }
+
+  const saldo = calcEstoque();
+  const disp = saldo[produto] || 0;
+  if (qtde > disp) { toast(`Estoque insuficiente! Disponível de ${produto}: ${disp}`, 'error'); return; }
+
+  setFormLoading(true);
+  setSyncStatus('loading', 'Salvando...');
+  try {
+    const result = await api({ action: 'addVenda', data, cliente, produto, motivo, qtde, status, obs });
+    vendas.push({ id: String(result.id), data, cliente, produto, motivo, qtde, status, obs });
+    renderAll();
+    document.getElementById('v-cliente').value = '';
+    document.getElementById('v-qtde').value = '';
+    document.getElementById('v-motivo').value = 'VENDA';
+    document.getElementById('v-obs').value = '';
+    setSyncStatus('ok', 'Sincronizado');
+    toast(`✓ Venda de ${qtde}x ${produto} registrada!`, 'success');
+  } catch(e) {
+    setSyncStatus('error', 'Erro ao salvar');
+    toast('Erro ao salvar: ' + e.message, 'error');
+  }
+  setFormLoading(false);
+}
+
+// ─── DELETE ───────────────────────────────────────────────────────────────────
+let pendingDelete = null;
+
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('[data-type][data-id]');
+  if (!btn) return;
+  pendingDelete = { type: btn.dataset.type, id: btn.dataset.id };
+  document.getElementById('modalOverlay').classList.add('open');
+});
+
+document.getElementById('modalCancel').addEventListener('click', () => {
+  pendingDelete = null;
+  document.getElementById('modalOverlay').classList.remove('open');
+});
+
+document.getElementById('modalConfirm').addEventListener('click', async () => {
+  if (!pendingDelete) return;
+  const { type, id } = pendingDelete;
+  document.getElementById('modalOverlay').classList.remove('open');
+  pendingDelete = null;
+
+  setSyncStatus('loading', 'Removendo...');
+  try {
+    const action = type === 'entrada' ? 'deleteEntrada' : 'deleteVenda';
+    await api({ action, id });
+    if (type === 'entrada') entradas = entradas.filter(x => x.id !== id);
+    else                    vendas   = vendas.filter(x => x.id !== id);
+    renderAll();
+    setSyncStatus('ok', 'Sincronizado');
+    toast('Registro removido.', 'success');
+  } catch(e) {
+    setSyncStatus('error', 'Erro ao remover');
+    toast('Erro ao remover: ' + e.message, 'error');
+  }
+});
+
+document.getElementById('modalOverlay').addEventListener('click', function(e) {
+  if (e.target === this) { pendingDelete = null; this.classList.remove('open'); }
+});
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+function setFormLoading(on) {
+  document.querySelectorAll('.btn, input, select, textarea').forEach(el => el.disabled = on);
+}
+
+function setSyncStatus(state, label) {
+  const dot = document.getElementById('syncDot');
+  dot.className = 'sync-dot ' + state;
+  document.getElementById('syncLabel').textContent = label;
+}
+
+function fmtDate(d) {
+  if (!d) return '—';
+  const s = String(d);
+  if (s.includes('/')) return s; // já formatado
+  const [y, m, day] = s.split('-');
+  return `${day}/${m}/${y}`;
+}
+
+function toast(msg, type = 'success') {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = `toast ${type} show`;
+  setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+// ─── TABS ─────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+    document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+    btn.classList.add('active');
+  });
+});
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+(function() {
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('e-data').value = today;
+  document.getElementById('v-data').value = today;
+  document.getElementById('v-motivo').value = 'VENDA';
+  document.getElementById('headerDate').textContent = new Date().toLocaleDateString('pt-BR', {
+    weekday: 'long', day: '2-digit', month: 'long', year: 'numeric'
+  });
+
+  // Verifica se a URL foi configurada
+  if (API_URL === 'COLE_A_URL_DO_APPS_SCRIPT_AQUI') {
+    document.getElementById('configBanner').classList.remove('hidden');
+    setSyncStatus('error', 'Não configurado');
+    return;
+  }
+  document.getElementById('configBanner').classList.add('hidden');
+  loadAll();
+})();
+</script>
+</body>
+</html>
